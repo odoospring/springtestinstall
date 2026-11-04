@@ -1,0 +1,53 @@
+<odoo>
+  <!-- Delivery / transfer form -->
+  <record id="view_picking_form_edi_info" model="ir.ui.view">
+    <field name="name">stock.picking.form.edi.info</field>
+    <field name="model">stock.picking</field>
+    <field name="inherit_id" ref="stock.view_picking_form"/>
+    <field name="arch" type="xml">
+      <field name="origin" position="after">
+        <field name="edi_order_number" invisible="not edi_order_number"/>
+        <field name="edi_order_id" invisible="not edi_order_id"/>
+      </field>
+    </field>
+  </record>
+
+  <record id="view_picking_search_edi_info" model="ir.ui.view">
+    <field name="name">stock.picking.search.edi.info</field>
+    <field name="model">stock.picking</field>
+    <field name="inherit_id" ref="stock.view_picking_internal_search"/>
+    <field name="arch" type="xml">
+      <field name="partner_id" position="after">
+        <field name="edi_order_number"/>
+        <field name="edi_order_id"/>
+      </field>
+    </field>
+  </record>
+
+  <!-- Customer invoice form -->
+  <record id="view_move_form_edi_info" model="ir.ui.view">
+    <field name="name">account.move.form.edi.info</field>
+    <field name="model">account.move</field>
+    <field name="inherit_id" ref="account.view_move_form"/>
+    <field name="arch" type="xml">
+      <xpath expr="//group[@id='header_right_group']" position="inside">
+        <field name="edi_order_number"
+               invisible="move_type not in ('out_invoice', 'out_refund')"/>
+        <field name="edi_order_id"
+               invisible="move_type not in ('out_invoice', 'out_refund')"/>
+      </xpath>
+    </field>
+  </record>
+
+  <record id="view_account_invoice_filter_edi_info" model="ir.ui.view">
+    <field name="name">account.move.search.edi.info</field>
+    <field name="model">account.move</field>
+    <field name="inherit_id" ref="account.view_account_invoice_filter"/>
+    <field name="arch" type="xml">
+      <field name="partner_id" position="after">
+        <field name="edi_order_number"/>
+        <field name="edi_order_id"/>
+      </field>
+    </field>
+  </record>
+</odoo>
