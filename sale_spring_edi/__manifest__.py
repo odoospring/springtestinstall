@@ -1,6 +1,6 @@
 {
     'name': 'Sale Order - Spring Systems EDI Info',
-    'version': '17.0.1.7.0',
+    'version': '17.0.1.8.0',
     'summary': 'Adds EDI header fields and a "Spring Systems EDI info" tab to sales orders',
     'category': 'Sales',
     'author': 'Your Company',

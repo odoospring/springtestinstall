@@ -1,3 +1,5 @@
+from urllib.parse import quote
+
 from odoo import api, fields, models
 from odoo.exceptions import ValidationError
 
@@ -29,15 +31,26 @@ class EdiPushEndpoint(models.Model):
         'Leave out of payload',
         help='Comma-separated keys to remove from the "data" section of the request, '
              'e.g. ship_to, customer, packages')
+    label_url_base = fields.Char(
+        'Label download URL',
+        default='https://staging-portalapp.springsystems.com/document/download/get/document_key/',
+        help='Shipping labels are downloaded from this address with the document key '
+             'from the push response added at the end. Change it for production.')
+    label_send_auth = fields.Boolean(
+        'Send credentials when downloading labels', default=False,
+        help='Off by default: the label URL is often on a different host than the '
+             'endpoint, and credentials should not be sent to another host. Turn on only '
+             'if the label download requires the same login.')
     company_id = fields.Many2one('res.company', default=lambda s: s.env.company,
                                  help='Leave empty to use for all companies.')
     active = fields.Boolean(default=True)
 
-    @api.constrains('url')
+    @api.constrains('url', 'label_url_base')
     def _check_url(self):
         for rec in self:
-            if not (rec.url or '').lower().startswith(('http://', 'https://')):
-                raise ValidationError('The endpoint URL must start with http:// or https://')
+            for value in (rec.url, rec.label_url_base):
+                if value and not value.lower().startswith(('http://', 'https://')):
+                    raise ValidationError('URLs must start with http:// or https://')
 
     @api.constrains('auth_type', 'username')
     def _check_basic_auth(self):
@@ -77,3 +90,20 @@ class EdiPushEndpoint(models.Model):
         self.ensure_one()
         skip = {k.strip() for k in (self.excluded_keys or '').split(',') if k.strip()}
         return {k: v for k, v in data.items() if k not in skip}
+
+    def _auth_parts(self):
+        """Returns (headers, auth) for requests, according to the authentication type."""
+        self.ensure_one()
+        headers, auth = {}, None
+        if self.auth_type == 'bearer' and self.api_key:
+            headers['Authorization'] = f'Bearer {self.api_key}'
+        elif self.auth_type == 'basic':
+            auth = (self.username or '', self.password or '')
+        return headers, auth
+
+    def _label_url(self, key):
+        self.ensure_one()
+        base = (self.label_url_base or '').strip()
+        if not base.endswith('/'):
+            base += '/'
+        return base + quote(key, safe='')

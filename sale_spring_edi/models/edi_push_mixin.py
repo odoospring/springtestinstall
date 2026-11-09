@@ -29,6 +29,9 @@ class EdiPushMixin(models.AbstractModel):
     def _edi_build_payload(self):
         raise NotImplementedError
 
+    def _edi_handle_response(self, data):
+        """Hook: called with the parsed JSON response after a successful push."""
+
     # --- the button -------------------------------------------------------
     def action_push_to_external(self):
         self.ensure_one()
@@ -55,11 +58,8 @@ class EdiPushMixin(models.AbstractModel):
             # lets the receiving system reject a repeat of the same document
             'Idempotency-Key': f'{self._name}:{self.id}',
         }
-        auth = None
-        if endpoint.auth_type == 'bearer' and endpoint.api_key:
-            headers['Authorization'] = f'Bearer {endpoint.api_key}'
-        elif endpoint.auth_type == 'basic':
-            auth = (endpoint.username or '', endpoint.password or '')
+        auth_headers, auth = endpoint._auth_parts()
+        headers.update(auth_headers)
 
         try:
             resp = requests.post(endpoint.url, data=json.dumps(payload, default=str),
@@ -71,6 +71,13 @@ class EdiPushMixin(models.AbstractModel):
             detail = f'Connection error: {str(e)[:1000]}'
             _logger.warning('External push failed for %s,%s: %s', self._name, self.id, e)
 
+        parsed = None
+        if ok:
+            try:
+                parsed = resp.json()
+            except ValueError:
+                parsed = None
+
         self.sudo().write({
             'edi_push_state': 'sent' if ok else 'error',
             'edi_push_date': fields.Datetime.now(),
@@ -79,6 +86,16 @@ class EdiPushMixin(models.AbstractModel):
         self.message_post(body=_('External push %(result)s. %(detail)s',
                                  result=_('succeeded') if ok else _('failed'),
                                  detail=detail))
+        if parsed is not None:
+            # Never let a problem reading the response undo a push that succeeded.
+            try:
+                with self.env.cr.savepoint():
+                    self._edi_handle_response(parsed)
+            except Exception:
+                _logger.exception('Could not process push response for %s,%s',
+                                  self._name, self.id)
+                self.message_post(body=_('The push succeeded, but its response '
+                                         'could not be processed.'))
         return {
             'type': 'ir.actions.client',
             'tag': 'display_notification',

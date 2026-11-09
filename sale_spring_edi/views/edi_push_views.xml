@@ -23,6 +23,8 @@
             <field name="password" password="True" invisible="auth_type != 'basic'"/>
             <field name="timeout"/>
             <field name="excluded_keys" placeholder="e.g. ship_to, customer"/>
+            <field name="label_url_base" invisible="document_type == 'invoice'"/>
+            <field name="label_send_auth" invisible="document_type == 'invoice'"/>
             <field name="company_id"/>
             <field name="active"/>
           </group>
@@ -52,6 +54,15 @@
           <div class="o_stat_info">
             <span class="o_stat_text">Push to EDI</span>
             <span class="o_stat_value"><field name="edi_push_state"/></span>
+          </div>
+        </button>
+        <field name="edi_label_keys" invisible="1"/>
+        <button name="action_get_shipping_labels" type="object"
+                class="oe_stat_button" icon="fa-print"
+                invisible="not edi_label_keys">
+          <div class="o_stat_info">
+            <span class="o_stat_text">Shipping Label</span>
+            <span class="o_stat_value"><field name="edi_label_count"/></span>
           </div>
         </button>
         <button name="action_reset_push_state" type="object" string="Reset push"
