@@ -6,8 +6,8 @@ class AccountMove(models.Model):
     _name = 'account.move'
     _inherit = ['account.move', 'edi.push.mixin']
 
-    edi_order_number = fields.Char('Order number', copy=False, index=True)
-    edi_order_id = fields.Char('order ID', copy=False, index=True)
+    edi_order_number = fields.Char('Order number', copy=False, readonly=True, index=True)
+    edi_order_id = fields.Char('order ID', copy=False, readonly=True, index=True)
 
     def _edi_document_type(self):
         return 'invoice'

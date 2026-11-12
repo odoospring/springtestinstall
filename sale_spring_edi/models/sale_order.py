@@ -2,36 +2,71 @@ from odoo import _, api, fields, models
 from odoo.exceptions import ValidationError
 
 
+EDI_SHIP_TO_FIELDS = (
+    'edi_ship_to_code',
+    'edi_ship_to_name',
+    'edi_ship_to_street',
+    'edi_ship_to_street2',
+    'edi_ship_to_city',
+    'edi_ship_to_state',
+    'edi_ship_to_zip',
+    'edi_ship_to_country',
+)
+EDI_FIELDS = (
+    'edi_order_number',
+    'edi_ship_open_date',
+    'edi_ship_close_date',
+    'edi_mark_for_location',
+    'edi_order_message',
+    'edi_order_id',
+    'edi_division',
+    'edi_department',
+    'edi_merchandise_type',
+    'edi_currency_code',
+    'edi_shipping_pay_method',
+) + EDI_SHIP_TO_FIELDS
+
+
 class SaleOrder(models.Model):
     _inherit = 'sale.order'
 
+    # Tell the form whether there is anything to show (the tab is hidden otherwise)
+    edi_has_data = fields.Boolean(compute='_compute_edi_flags')
+    edi_has_ship_to = fields.Boolean(compute='_compute_edi_flags')
+
+    @api.depends(*EDI_FIELDS)
+    def _compute_edi_flags(self):
+        for order in self:
+            order.edi_has_data = any(getattr(order, f) for f in EDI_FIELDS)
+            order.edi_has_ship_to = any(getattr(order, f) for f in EDI_SHIP_TO_FIELDS)
+
     # Header (next to Order Date)
-    edi_order_number = fields.Char('Order number', copy=False, index=True)
-    edi_ship_open_date = fields.Date('Ship Open Date', copy=False)
-    edi_ship_close_date = fields.Date('Ship Close Date', copy=False)
+    edi_order_number = fields.Char('Order number', copy=False, readonly=True, index=True)
+    edi_ship_open_date = fields.Date('Ship Open Date', copy=False, readonly=True)
+    edi_ship_close_date = fields.Date('Ship Close Date', copy=False, readonly=True)
 
     # "Spring Systems EDI info" tab - left column
-    edi_mark_for_location = fields.Char('Mark For location', copy=False)
-    edi_order_message = fields.Text('Order Message', copy=False)
+    edi_mark_for_location = fields.Char('Mark For location', copy=False, readonly=True)
+    edi_order_message = fields.Text('Order Message', copy=False, readonly=True)
 
     # "Spring Systems EDI info" tab - right column
-    edi_order_id = fields.Char('order ID', copy=False, index=True)
-    edi_division = fields.Char('Division', copy=False)
-    edi_department = fields.Char('Department', copy=False)
-    edi_merchandise_type = fields.Char('Merchandise Type', copy=False)
-    edi_currency_code = fields.Char('Currency', copy=False,
+    edi_order_id = fields.Char('order ID', copy=False, readonly=True, index=True)
+    edi_division = fields.Char('Division', copy=False, readonly=True)
+    edi_department = fields.Char('Department', copy=False, readonly=True)
+    edi_merchandise_type = fields.Char('Merchandise Type', copy=False, readonly=True)
+    edi_currency_code = fields.Char('Currency', copy=False, readonly=True,
                                     help='Currency code received on the EDI order, e.g. USD')
-    edi_shipping_pay_method = fields.Char('Shipping Pay Method', copy=False)
+    edi_shipping_pay_method = fields.Char('Shipping Pay Method', copy=False, readonly=True)
 
     # Ship-To address exactly as received via EDI (snapshot, not linked to contacts)
-    edi_ship_to_code = fields.Char('Ship-To Location Code', copy=False)
-    edi_ship_to_name = fields.Char('Ship-To Name', copy=False)
-    edi_ship_to_street = fields.Char('Ship-To Address 1', copy=False)
-    edi_ship_to_street2 = fields.Char('Ship-To Address 2', copy=False)
-    edi_ship_to_city = fields.Char('Ship-To City', copy=False)
-    edi_ship_to_state = fields.Char('Ship-To State', copy=False)
-    edi_ship_to_zip = fields.Char('Ship-To Zip', copy=False)
-    edi_ship_to_country = fields.Char('Ship-To Country', copy=False)
+    edi_ship_to_code = fields.Char('Ship-To Location Code', copy=False, readonly=True)
+    edi_ship_to_name = fields.Char('Ship-To Name', copy=False, readonly=True)
+    edi_ship_to_street = fields.Char('Ship-To Address 1', copy=False, readonly=True)
+    edi_ship_to_street2 = fields.Char('Ship-To Address 2', copy=False, readonly=True)
+    edi_ship_to_city = fields.Char('Ship-To City', copy=False, readonly=True)
+    edi_ship_to_state = fields.Char('Ship-To State', copy=False, readonly=True)
+    edi_ship_to_zip = fields.Char('Ship-To Zip', copy=False, readonly=True)
+    edi_ship_to_country = fields.Char('Ship-To Country', copy=False, readonly=True)
 
     # Database-level backstop (also protects against two requests arriving at once).
     # Empty values are stored as NULL, which PostgreSQL treats as distinct, so

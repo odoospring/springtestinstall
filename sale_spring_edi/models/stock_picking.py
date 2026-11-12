@@ -50,6 +50,23 @@ def _extract_label_keys(data):
     return keys
 
 
+def _find_first(obj, key):
+    """First non-empty value stored under `key` anywhere in a JSON structure."""
+    if isinstance(obj, dict):
+        if obj.get(key):
+            return obj[key]
+        children = obj.values()
+    elif isinstance(obj, list):
+        children = obj
+    else:
+        return None
+    for child in children:
+        found = _find_first(child, key)
+        if found:
+            return found
+    return None
+
+
 def _label_file_type(content, content_type):
     if content.startswith(b'%PDF'):
         return 'pdf', 'application/pdf'
@@ -74,6 +91,11 @@ class StockPicking(models.Model):
                                    store=True, readonly=True, index=True)
     edi_order_id = fields.Char('order ID', related='sale_id.edi_order_id',
                                store=True, readonly=True, index=True)
+    edi_tracking_number = fields.Char(
+        'Tracking number', copy=False, readonly=True,
+        help='Sent with the shipment. Filled from the response if left empty.')
+    edi_carrier_code = fields.Char(
+        'Carrier code', copy=False, readonly=True, help='Carrier code to send, e.g. UPS.')
     edi_label_keys = fields.Char('Label document keys', copy=False, readonly=True,
                                  help='Comma-separated keys returned by the external '
                                       'system when the shipment was pushed.')
@@ -88,14 +110,16 @@ class StockPicking(models.Model):
         return 'delivery'
 
     def _edi_check_pushable(self):
-        if self.state != 'done':
-            raise UserError(_('Only validated (Done) transfers can be pushed.'))
+        if self.state in ('draft', 'cancel'):
+            raise UserError(_('Confirm the transfer before pushing it '
+                              '(draft and cancelled transfers cannot be pushed).'))
 
     def _edi_package_payload(self):
-        """Group the done move lines by the package they were put in.
-        Returns (packages, unpacked_items)."""
+        """Packages for the payload. Items put in a pack in Odoo keep their pack;
+        anything not in a pack is placed together in one default carton."""
         packages, unpacked = {}, []
-        for ml in [l for l in self.move_line_ids if l.quantity]:
+        lines = [l for l in self.move_line_ids if l.quantity]
+        for ml in lines:
             item = {
                 'sku': ml.product_id.default_code,
                 'description': ml.product_id.name,
@@ -114,12 +138,33 @@ class StockPicking(models.Model):
                 'items': [],
             })
             entry['items'].append(item)
-        return list(packages.values()), unpacked
+        if not lines:
+            # Nothing reserved yet (e.g. the transfer is still Waiting): use the demand.
+            for m in self.move_ids:
+                if m.state != 'cancel' and m.product_uom_qty:
+                    unpacked.append({
+                        'sku': m.product_id.default_code,
+                        'description': m.product_id.name,
+                        'quantity': m.product_uom_qty,
+                        'uom': m.product_uom.name,
+                        'lot': None,
+                    })
+        result = list(packages.values())
+        if unpacked:
+            result.append({
+                'package_number': f'{self.name}-{len(result) + 1}',
+                'package_type': None,
+                'weight': None,
+                'items': unpacked,
+            })
+        for number, package in enumerate(result, 1):
+            package['sequence'] = number
+        return result
 
     def _edi_build_payload(self):
         self.ensure_one()
         order = self.sale_id
-        packages, unpacked = self._edi_package_payload()
+        packages = self._edi_package_payload()
         carrier = _optional(self, 'carrier_id')
         return {
             'delivery_number': self.name,
@@ -131,7 +176,9 @@ class StockPicking(models.Model):
             'edi_order_id': self.edi_order_id,
             'ship_to': order._edi_ship_to_dict() if order else {},
             'carrier': carrier.name if carrier else None,
-            'tracking_number': _optional(self, 'carrier_tracking_ref') or None,
+            'carrier_code': self.edi_carrier_code or None,
+            'tracking_number': (self.edi_tracking_number
+                                or _optional(self, 'carrier_tracking_ref') or None),
             'lines': [{
                 'sku': m.product_id.default_code,
                 'description': m.product_id.name,
@@ -140,13 +187,21 @@ class StockPicking(models.Model):
                 'uom': m.product_uom.name,
             } for m in self.move_ids],
             'packages': packages,
-            'unpacked_items': unpacked,
         }
 
     def _edi_handle_response(self, data):
+        vals = {}
         keys = _extract_label_keys(data)
         if keys:
-            self.sudo().write({'edi_label_keys': ','.join(keys)})
+            vals['edi_label_keys'] = ','.join(keys)
+        tracking = _find_first(data, 'ship_info_tracking')
+        if tracking and not self.edi_tracking_number:
+            vals['edi_tracking_number'] = str(tracking)
+        carrier = _find_first(data, 'ship_info_carrier_code')
+        if carrier and not self.edi_carrier_code:
+            vals['edi_carrier_code'] = str(carrier)
+        if vals:
+            self.sudo().write(vals)
         warnings = data.get('warnings') if isinstance(data, dict) else None
         if warnings:
             self.message_post(body=_('Warnings from the external system: %s',
