@@ -14,6 +14,15 @@
         <field name="edi_ship_close_date" invisible="not edi_ship_close_date"/>
       </xpath>
 
+      <!-- Shows only if the standard Delivery button cannot find the order's transfers -->
+      <xpath expr="//div[@name='button_box']" position="inside">
+        <button name="action_view_edi_transfers" type="object" class="oe_stat_button"
+                icon="fa-truck" groups="stock.group_stock_user"
+                invisible="edi_transfer_count == 0">
+          <field name="edi_transfer_count" widget="statinfo" string="Transfers"/>
+        </button>
+      </xpath>
+
       <!-- New tab -->
       <xpath expr="//notebook" position="inside">
         <page string="Spring Systems EDI info" name="spring_edi_info" invisible="not edi_has_data">

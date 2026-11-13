@@ -1,5 +1,5 @@
 from odoo import _, api, fields, models
-from odoo.exceptions import ValidationError
+from odoo.exceptions import UserError, ValidationError
 
 
 EDI_SHIP_TO_FIELDS = (
@@ -39,6 +39,36 @@ class SaleOrder(models.Model):
         for order in self:
             order.edi_has_data = any(getattr(order, f) for f in EDI_FIELDS)
             order.edi_has_ship_to = any(getattr(order, f) for f in EDI_SHIP_TO_FIELDS)
+
+    # Fallback navigation to the order's transfers (see action_view_edi_transfers)
+    edi_transfer_count = fields.Integer('Transfers', compute='_compute_edi_transfer_count')
+
+    def _edi_unlinked_transfers_domain(self):
+        """Transfers that belong to this order by procurement group or source
+        document but are NOT linked through the standard Sales Order field (the
+        link Odoo's own Delivery button relies on)."""
+        self.ensure_one()
+        parts = [('origin', '=', self.name)]
+        if self.procurement_group_id:
+            parts.append(('group_id', '=', self.procurement_group_id.id))
+        return [('sale_id', '!=', self.id)] + ['|'] * (len(parts) - 1) + parts
+
+    @api.depends('state', 'name', 'procurement_group_id', 'picking_ids')
+    def _compute_edi_transfer_count(self):
+        Picking = self.env['stock.picking'].sudo()
+        for order in self:
+            if not isinstance(order.id, int) or order.state in ('draft', 'sent', 'cancel'):
+                order.edi_transfer_count = 0
+            else:
+                order.edi_transfer_count = Picking.search_count(
+                    order._edi_unlinked_transfers_domain())
+
+    def action_view_edi_transfers(self):
+        self.ensure_one()
+        pickings = self.env['stock.picking'].sudo().search(self._edi_unlinked_transfers_domain())
+        if not pickings:
+            raise UserError(_('No transfers were found for this order.'))
+        return self._get_action_view_picking(pickings)
 
     # Header (next to Order Date)
     edi_order_number = fields.Char('Order number', copy=False, readonly=True, index=True)

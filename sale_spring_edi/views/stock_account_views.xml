@@ -8,9 +8,13 @@
       <field name="origin" position="after">
         <field name="edi_order_number" invisible="not edi_order_number"/>
         <field name="edi_order_id" invisible="not edi_order_id"/>
-        <field name="edi_tracking_number" invisible="not edi_tracking_number"/>
-        <field name="edi_carrier_code" invisible="not edi_carrier_code"/>
       </field>
+      <!-- Odoo's "Shipping Information" section (Additional Info tab) comes from stock_delivery -->
+      <xpath expr="//group[@name='carrier_data']" position="inside">
+        <field name="edi_carrier_code" invisible="not edi_carrier_code"/>
+        <field name="edi_tracking_number"
+               invisible="not edi_tracking_number or edi_tracking_number == carrier_tracking_ref"/>
+      </xpath>
     </field>
   </record>
 

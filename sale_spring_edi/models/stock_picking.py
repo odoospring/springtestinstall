@@ -200,6 +200,10 @@ class StockPicking(models.Model):
         carrier = _find_first(data, 'ship_info_carrier_code')
         if carrier and not self.edi_carrier_code:
             vals['edi_carrier_code'] = str(carrier)
+        # Also show it in Odoo's own "Tracking Reference" (Shipping Information)
+        shown = vals.get('edi_tracking_number') or self.edi_tracking_number
+        if shown and not self.carrier_tracking_ref:
+            vals['carrier_tracking_ref'] = shown
         if vals:
             self.sudo().write(vals)
         warnings = data.get('warnings') if isinstance(data, dict) else None
